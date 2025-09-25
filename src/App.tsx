@@ -13,6 +13,7 @@ import Wishlist from './pages/Wishlist';
 import Cart from './pages/Cart';
 import Profile from './pages/Profile';
 import PrivateRoute from './components/PrivateRoute';
+import OAuthCallback from './pages/OAuthCallback';
 
 const App: React.FC = () => {
   return (
@@ -28,6 +29,7 @@ const App: React.FC = () => {
           <Route path="/wishlist" element={<PrivateRoute><Wishlist /></PrivateRoute>} />
           <Route path="/cart" element={<PrivateRoute><Cart /></PrivateRoute>} />
           <Route path="/profile" element={<PrivateRoute><Profile /></PrivateRoute>} />
+          <Route path="/oauth-callback" element={<OAuthCallback />} />
         </Routes>
       </Router>
       <ToastContainer position="top-center" />

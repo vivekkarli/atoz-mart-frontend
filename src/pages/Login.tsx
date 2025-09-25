@@ -6,6 +6,7 @@ import * as yup from 'yup';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import { login } from '../services/authService';
+import oauthService from '../services/oauthService';
 
 const schema = yup.object({
   username: yup.string().required(),
@@ -29,16 +30,23 @@ const Login: React.FC = () => {
     }
   };
 
+  const handleOAuthLogin = () => {
+    oauthService.initiateAuth('keycloak'); // 'keycloak' as provider identifier
+  };
+
   return (
     <Box sx={{ maxWidth: 400, mx: 'auto', mt: 8 }}>
       <Typography variant="h5">Login</Typography>
       <form onSubmit={handleSubmit(onSubmit)}>
         <TextField label="Username" {...register('username')} error={!!errors.username} helperText={errors.username?.message} fullWidth margin="normal" onChange={(e) => setUsernameForForgot(e.target.value)} />
         <TextField label="Password" type="password" {...register('password')} error={!!errors.password} helperText={errors.password?.message} fullWidth margin="normal" />
-        <Button type="submit" variant="contained" fullWidth>
+        <Button type="submit" variant="contained" fullWidth sx={{ mb: 2 }}>
           Login
         </Button>
       </form>
+      <Button variant="outlined" fullWidth onClick={handleOAuthLogin} sx={{ mb: 2 }}>
+        Sign in with Keycloak
+      </Button>
       <Link href="/signup">Sign Up</Link> | <Link href={`/forgot-password?username=${usernameForForgot}`}>Forgot Password</Link>
     </Box>
   );
