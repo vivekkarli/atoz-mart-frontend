@@ -21,21 +21,21 @@ const ResetPassword: React.FC = () => {
 
   const token = searchParams.get('token');
 
-  const onSubmit = async (data: any) => {
-    console.log('Form submitted', { token, data }); // Debug log
-    if (!token) {
-      toast.error('Invalid reset link');
-      return;
-    }
+const onSubmit = async (data: any) => {
+  console.log('Form submitted', { token, data }); // Debug log
+  if (!token) {
+    toast.error('Invalid reset link');
+    return;
+  }
 
-    try {
-      await resetPassword({ token, newPassword: data.newPassword }); // API call
-      toast.success('Password reset successful');
-      navigate('/login'); // Redirect after success
-    } catch (error) {
-      toast.error('Failed to reset password. Please try again.');
-    }
-  };
+  try {
+    await resetPassword({ newPassword: data.newPassword }, token); // Use interface for body
+    toast.success('Password reset successful');
+    navigate('/login'); // Redirect after success
+  } catch (error) {
+    toast.error('Failed to reset password. Please try again.');
+  }
+};
 
   return (
     <Box sx={{ maxWidth: 400, mx: 'auto', mt: 8 }}>

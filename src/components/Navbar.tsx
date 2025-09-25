@@ -7,12 +7,12 @@ const Navbar: React.FC = () => {
   const auth = useContext(AuthContext);
   const navigate = useNavigate();
 
-  const handleLogout = () => {
-    auth?.logout();
-    if (window.location.pathname !== '/') {
-      navigate('/');
-    }
-  };
+const handleLogout = () => {
+  auth?.logout();
+  if (window.location.pathname !== '/') {
+    navigate('/');
+  }
+};
 
   return (
     <AppBar position="static">

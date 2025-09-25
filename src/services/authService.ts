@@ -1,3 +1,8 @@
+// Updated src/services/authService.ts
+// - ForgotPasswordRequest is already used correctly.
+// - Updated resetPassword to use ResetPasswordRequest interface for the request body (data param),
+//   while token is passed separately for the query param.
+
 import axios, { AxiosError } from 'axios';
 import { toast } from 'react-toastify';
 import { ErrorResponse, LoginRequest, SignupRequest, ForgotPasswordRequest, ResetPasswordRequest } from '../types';
@@ -41,7 +46,7 @@ api.interceptors.response.use(
 
 export const login = async (data: LoginRequest) => {
   const response = await api.post('/login', data);
-  const token = response.headers['x-access-token']; // As per your note
+  const token = response.headers['x-access-token'];
   return { data: response.data, token };
 };
 
@@ -55,7 +60,7 @@ export const forgotPassword = async (data: ForgotPasswordRequest) => {
   return response.data;
 };
 
-export const resetPassword = async (data: ResetPasswordRequest) => {
-  const response = await api.post('/reset-password', data);
+export const resetPassword = async (data: ResetPasswordRequest, token: string) => {
+  const response = await api.post(`/reset-password?token=${token}`, data);
   return response.data;
 };
