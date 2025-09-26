@@ -1,43 +1,40 @@
-// Updated src/services/authService.ts
-// - ForgotPasswordRequest is already used correctly.
-// - Updated resetPassword to use ResetPasswordRequest interface for the request body (data param),
-//   while token is passed separately for the query param.
-
-import axios, { AxiosError } from 'axios';
+import axios, { AxiosError, AxiosResponse } from 'axios';
 import { toast } from 'react-toastify';
 import { ErrorResponse, LoginRequest, SignupRequest, ForgotPasswordRequest, ResetPasswordRequest } from '../types';
 
-// Configurable base URLs (extendable for other services)
 const BASE_URLS = {
   auth: process.env.REACT_APP_AUTH_BASE_URL || 'https://localhost:8072/atozmart/authserver',
-  // Add other services here later, e.g., product: 'https://localhost:8073/atozmart/products'
 };
 
-// Create Axios instance with base config
 const api = axios.create({
   baseURL: BASE_URLS.auth,
 });
 
-// Optional: Bypass SSL verification for self-signed certs (development only)
 if (process.env.NODE_ENV === 'development') {
-  // Warning: This is insecure and should be removed in production
   process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
   console.warn('SSL verification disabled for development. Remove this in production!');
 }
 
-// Add JWT to headers if present
 api.interceptors.request.use((config) => {
   const token = localStorage.getItem('jwt');
   if (token) {
-    config.headers['X-Access-Token'] = token; // As per your sample
+    config.headers['X-Access-Token'] = token; // Match server case
   }
   return config;
 });
 
-// Handle errors globally
 api.interceptors.response.use(
-  (response) => response,
+  (response: AxiosResponse) => response, // Success case
   (error: AxiosError<ErrorResponse>) => {
+    if (error.response) {
+      // Response received but blocked by CORS or other client-side issues
+      const token = error.response.headers['x-access-token'] || error.response.headers['X-Access-Token'];
+      if (token) {
+        localStorage.setItem('jwt', token); // Save token despite CORS error
+        console.warn('CORS error encountered, but token saved:', token);
+        return { data: error.response.data, token }; // Return partial success
+      }
+    }
     const errorMsg = error.response?.data?.errorMsg || 'An unexpected error occurred';
     toast.error(errorMsg, { position: 'top-center' });
     return Promise.reject(error);
@@ -46,7 +43,8 @@ api.interceptors.response.use(
 
 export const login = async (data: LoginRequest) => {
   const response = await api.post('/login', data);
-  const token = response.headers['x-access-token'];
+  const token = response.headers['x-access-token'] || response.headers['X-Access-Token'];
+  if (token) localStorage.setItem('jwt', token); // Ensure token is saved
   return { data: response.data, token };
 };
 

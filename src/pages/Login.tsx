@@ -7,6 +7,7 @@ import { useNavigate } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import { login } from '../services/authService';
 import oauthService from '../services/oauthService';
+import { useAuth } from '../contexts/AuthContext';
 
 const schema = yup.object({
   username: yup.string().required(),
@@ -14,6 +15,7 @@ const schema = yup.object({
 }).required();
 
 const Login: React.FC = () => {
+  const { login: contextLogin } = useAuth(); // Use context login
   const [usernameForForgot, setUsernameForForgot] = useState('');
   const navigate = useNavigate();
   const { register, handleSubmit, formState: { errors } } = useForm({
@@ -22,16 +24,21 @@ const Login: React.FC = () => {
 
   const onSubmit = async (data: any) => {
     try {
-      const { data: responseData, token } = await login(data);
-      toast.success('Login successful');
-      navigate('/');
+      const { token } = await login(data);
+      if (token) {
+        contextLogin(token); // Update AuthContext
+        toast.success('Login successful');
+        navigate('/');
+      } else {
+        throw new Error('No token received');
+      }
     } catch (error) {
-      toast.error('Login failed');
+      toast.error('Login failed due to an unexpected error');
     }
   };
 
   const handleOAuthLogin = () => {
-    oauthService.initiateAuth('keycloak'); // 'keycloak' as provider identifier
+    oauthService.initiateAuth('keycloak');
   };
 
   return (
