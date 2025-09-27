@@ -17,7 +17,12 @@ const Navbar: React.FC = () => {
       <Toolbar>
         <Button component={Link} to="/" color="inherit">Home</Button>
         {isAuthenticated ? (
-          <Button color="inherit" onClick={handleLogout}>Logout</Button>
+          <>
+            <Button component={Link} to="/wishlist" color="inherit">Wishlist</Button>
+            <Button component={Link} to="/cart" color="inherit">Cart</Button>
+            <Button component={Link} to="/profile" color="inherit">Profile</Button>
+            <Button color="inherit" onClick={handleLogout}>Logout</Button>
+          </>
         ) : (
           <Button component={Link} to="/login" color="inherit">Login</Button>
         )}

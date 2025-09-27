@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { Box, Grid, Card, CardContent, CardActions, Button, Typography, TextField, MenuItem, Select, FormControl, InputLabel, Dialog, DialogTitle, DialogContent, DialogContentText, DialogActions, Snackbar } from '@mui/material';
+import { Box, Grid, Card, CardContent, CardActions, Button, Typography, TextField, MenuItem, Select, FormControl, InputLabel, Dialog, DialogTitle, DialogContent, DialogContentText, DialogActions } from '@mui/material';
 import { Add, Remove, AddShoppingCart, FavoriteBorder } from '@mui/icons-material';
 import { getItems, getCategories } from '../services/productService';
 import axios from 'axios';
+import { toast } from 'react-toastify';
 
 // Utility function to clean empty parameters
 const cleanParams = (params: any) => {
@@ -52,50 +53,45 @@ const Home: React.FC = () => {
     'sort-by': 'name',
     direction: 'asc',
   });
-  const [openLoginDialog, setOpenLoginDialog] = useState(false); // For login popup
-  const [snackbarOpen, setSnackbarOpen] = useState(false); // For all API notifications
-  const [snackbarMessage, setSnackbarMessage] = useState(''); // Message for Snackbar
-  const [snackbarSeverity, setSnackbarSeverity] = useState<'success' | 'error'>('success'); // Type of message
+  const [openLoginDialog, setOpenLoginDialog] = useState(false);
 
-  // Fetch categories only once on mount
   useEffect(() => {
     const fetchCategories = async () => {
       try {
         const data = await getCategories();
         setCategories(data);
-        setSnackbarMessage('Categories loaded successfully');
-        setSnackbarSeverity('success');
-        setSnackbarOpen(true);
+        toast.success('Categories loaded successfully');
       } catch (error: any) {
-        setSnackbarMessage(error.message || 'Failed to load categories');
-        setSnackbarSeverity('error');
-        setSnackbarOpen(true);
+        const errorData = error.response?.data || { errorMsg: 'Failed to load categories' };
+        toast.error(errorData.errorMsg);
       }
     };
     fetchCategories();
   }, []);
 
-  // Fetch items when page, filters, or page size changes
   useEffect(() => {
     const fetchItems = async () => {
       try {
         const params = {
           ...filters,
-          page: currentPage - 1, // API uses 0-based indexing
+          page: currentPage - 1,
           size: pageSize,
         };
-        const cleanedParams = cleanParams(params); // Clean empty parameters
+        const cleanedParams = cleanParams(params);
         const data = await getItems(cleanedParams);
-        const itemsWithoutImages = data.items.map((item: Item) => ({ ...item, quantity: 1 })); // No image fetch
+        const itemsWithoutImages = data.items.map((item: Item) => ({ ...item, quantity: 1 }));
         setItems(itemsWithoutImages);
         setTotalPages(data.totalPages);
-        setSnackbarMessage('Items loaded successfully');
-        setSnackbarSeverity('success');
-        setSnackbarOpen(true);
+        toast.success('Items loaded successfully');
       } catch (error: any) {
-        setSnackbarMessage(error.message || 'Failed to load items');
-        setSnackbarSeverity('error');
-        setSnackbarOpen(true);
+        const errorData = error.response?.data || { errorMsg: 'Failed to load items' };
+        if (error.response && error.response.status === 404) {
+          setItems([]);
+          setTotalPages(0);
+          toast.error(errorData.errorMsg || 'No items available for the selected filters');
+        } else {
+          toast.error(errorData.errorMsg);
+        }
       }
     };
     fetchItems();
@@ -127,20 +123,14 @@ const Home: React.FC = () => {
           unitPrice: item.unitPrice,
           quantity: item.quantity || 1,
         },
-        {
-          headers: { 'Authorization': `Bearer ${token}` },
-        }
+        { headers: { 'Authorization': `Bearer ${token}` } }
       );
       if (response.status === 201) {
-        setSnackbarMessage(`Added ${item.name} to cart`);
-        setSnackbarSeverity('success');
-        setSnackbarOpen(true);
+        toast.success(`Added ${item.name} to cart`);
       }
     } catch (error: any) {
       const errorData = error.response?.data || { errorMsg: 'Failed to add to cart' };
-      setSnackbarMessage(errorData.errorMsg);
-      setSnackbarSeverity('error');
-      setSnackbarOpen(true);
+      toast.error(errorData.errorMsg);
     }
   };
 
@@ -160,24 +150,17 @@ const Home: React.FC = () => {
           itemName,
           unitPrice,
         },
-        {
-          headers: { 'Authorization': `Bearer ${token}` },
-        }
+        { headers: { 'Authorization': `Bearer ${token}` } }
       );
       if (response.status === 201) {
-        setSnackbarMessage(`Added ${itemName} to wishlist`);
-        setSnackbarSeverity('success');
-        setSnackbarOpen(true);
+        toast.success(`Added ${itemName} to wishlist`);
       }
     } catch (error: any) {
       const errorData = error.response?.data || { errorMsg: 'Failed to add to wishlist' };
-      setSnackbarMessage(errorData.errorMsg);
-      setSnackbarSeverity('error');
-      setSnackbarOpen(true);
+      toast.error(errorData.errorMsg);
     }
   };
 
-  // Handle input changes without triggering API immediately
   const handleInputChange = (event: React.ChangeEvent<{ name?: string; value: string }> | React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = 'target' in event
       ? { name: event.target.name, value: event.target.value }
@@ -185,13 +168,11 @@ const Home: React.FC = () => {
     setInputFilters(prev => ({ ...prev, [name || '']: value }));
   };
 
-  // Apply filters and trigger API call
   const handleApplyFilters = () => {
     setFilters(inputFilters);
-    setCurrentPage(1); // Reset to first page on filter apply
+    setCurrentPage(1);
   };
 
-  // Remove all filters and reset to default
   const handleRemoveFilters = () => {
     setFilters({
       category: '',
@@ -209,7 +190,7 @@ const Home: React.FC = () => {
       'sort-by': 'name',
       direction: 'asc',
     });
-    setCurrentPage(1); // Reset to first page
+    setCurrentPage(1);
   };
 
   const goToFirstPage = () => setCurrentPage(1);
@@ -218,10 +199,6 @@ const Home: React.FC = () => {
 
   const handleCloseLoginDialog = () => {
     setOpenLoginDialog(false);
-  };
-
-  const handleCloseSnackbar = () => {
-    setSnackbarOpen(false);
   };
 
   return (
@@ -295,10 +272,10 @@ const Home: React.FC = () => {
         <>
           <Grid container spacing={2}>
             {items.map(item => (
-              <Grid item={true} xs={12} sm={6} md={4} key={item.id}>
+              <Grid item xs={12} sm={6} md={4} key={item.id}>
                 <Card>
                   <CardContent>
-                    <img src={undefined} alt={item.name} style={{ maxWidth: '100%', height: 'auto' }} /> {/* Broken image placeholder */}
+                    <img src={undefined} alt={item.name} style={{ maxWidth: '100%', height: 'auto' }} />
                     <Typography variant="h6">{item.name}</Typography>
                     <Typography color="text.secondary">${item.unitPrice.toFixed(2)}</Typography>
                     <Typography variant="body2">{item.details}</Typography>
@@ -342,13 +319,6 @@ const Home: React.FC = () => {
           </Button>
         </DialogActions>
       </Dialog>
-      <Snackbar
-        open={snackbarOpen}
-        autoHideDuration={3000}
-        onClose={handleCloseSnackbar}
-        message={snackbarMessage}
-        severity={snackbarSeverity}
-      />
     </Box>
   );
 };
