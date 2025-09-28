@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Box, Typography, Button, Select, MenuItem, FormControl, InputLabel, TextField, Dialog, DialogTitle, DialogContent, DialogActions, Accordion, AccordionSummary, AccordionDetails, Card, CardContent } from '@mui/material';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import axios from 'axios';
 import { toast } from 'react-toastify';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
@@ -27,7 +27,7 @@ interface Address {
 interface OrderSummary {
   orderId: number;
   deliveryStatus: string;
-  orderedOn: string; // Updated to match API response
+  orderedOn: string;
 }
 
 interface OrderDetail {
@@ -36,7 +36,7 @@ interface OrderDetail {
   deliveryStatus: string;
   orderStatus: string;
   orderTotal: number;
-  orderedOn: string; // Updated to match API response
+  orderedOn: string;
   orderItems: { itemId: string; itemName: string; unitPrice: number; quantity: number; effectivePrice: number }[] | null;
 }
 
@@ -51,43 +51,46 @@ const Profile: React.FC = () => {
   const [orderDetails, setOrderDetails] = useState<{ [key: number]: OrderDetail }>({});
   const [editBasicOpen, setEditBasicOpen] = useState(false);
   const [editAddressOpen, setEditAddressOpen] = useState(false);
-  const [createProfileOpen, setCreateProfileOpen] = useState(false);
   const [addAddressOpen, setAddAddressOpen] = useState(false);
+  const [changePasswordOpen, setChangePasswordOpen] = useState(false);
   const [selectedAddressType, setSelectedAddressType] = useState<string>('');
   const [basicDetails, setBasicDetails] = useState<BasicDetails>({});
   const [addressDetails, setAddressDetails] = useState<Address>({ addressType: '', addressDesc: null, defaultAddress: false, addLine1: '', addLine2: '', addLine3: '', pincode: '', country: '' });
+  const [oldPassword, setOldPassword] = useState('');
+  const [newPassword, setNewPassword] = useState('');
   const navigate = useNavigate();
+  const location = useLocation();
 
   useEffect(() => {
     fetchProfile();
   }, []);
 
   const fetchProfile = async () => {
-  const token = localStorage.getItem('jwt');
-  if (!token) return;
+    const token = localStorage.getItem('jwt');
+    if (!token) return;
 
-  try {
-    const baseUrl = process.env.REACT_APP_API_BASE_URL || 'https://localhost:8072/atozmart';
-    const response = await axios.get(
-      `${baseUrl}/profile/profile`,
-      { headers: { 'Authorization': `Bearer ${token}` } }
-    );
-    if (response.status === 200) {
-      setProfile(response.data);
-      toast.success('Profile loaded successfully');
+    try {
+      const baseUrl = process.env.REACT_APP_API_BASE_URL || 'https://localhost:8072/atozmart';
+      const response = await axios.get(
+        `${baseUrl}/profile/profile`,
+        { headers: { 'Authorization': `Bearer ${token}` } }
+      );
+      if (response.status === 200) {
+        setProfile(response.data);
+        toast.success('Profile loaded successfully');
+      }
+    } catch (error: any) {
+      if (error.response && error.response.status === 404) {
+        setProfile(null);
+        if (!location.pathname.includes('/create-profile')) {
+          navigate('/create-profile');
+        }
+      } else {
+        const errorData = error.response?.data || { errorMsg: 'Failed to load profile' };
+        toast.error(errorData.errorMsg);
+      }
     }
-  } catch (error: any) {
-    console.error('Profile fetch error:', error); // Add this for debugging
-    if (error.response && error.response.status === 404) {
-      setProfile(null);
-      navigate('/create-profile');
-      toast.info('No profile found. Please create a profile.');
-    } else {
-      const errorData = error.response?.data || { errorMsg: 'Failed to load profile' };
-      toast.error(errorData.errorMsg);
-    }
-  }
-};
+  };
 
   const fetchOrders = async () => {
     const token = localStorage.getItem('jwt');
@@ -135,36 +138,6 @@ const Profile: React.FC = () => {
       }
     } catch (error: any) {
       const errorData = error.response?.data || { errorMsg: 'Failed to load order details' };
-      toast.error(errorData.errorMsg);
-    }
-  };
-
-  const handleCreateProfile = async () => {
-    const token = localStorage.getItem('jwt');
-    if (!token) return;
-
-    try {
-      const baseUrl = process.env.REACT_APP_API_BASE_URL || 'https://localhost:8072/atozmart';
-      const requestBody = {
-        basicDetails: { firstName: basicDetails.firstName, lastName: basicDetails.lastName, mail: basicDetails.mail, mobileNo: basicDetails.mobileNo },
-        addressDetails: [
-          { ...addressDetails, defaultAddress: true },
-          { ...addressDetails, addressType: 'work', defaultAddress: false },
-          { ...addressDetails, addressType: 'others', addressDesc: 'other address', defaultAddress: false },
-        ],
-      };
-      const response = await axios.post(
-        `${baseUrl}/profile/profile`,
-        requestBody,
-        { headers: { 'Authorization': `Bearer ${token}` } }
-      );
-      if (response.status === 201) {
-        setCreateProfileOpen(false);
-        fetchProfile();
-        toast.success('Profile created successfully');
-      }
-    } catch (error: any) {
-      const errorData = error.response?.data || { errorMsg: 'Failed to create profile' };
       toast.error(errorData.errorMsg);
     }
   };
@@ -304,6 +277,33 @@ const Profile: React.FC = () => {
     }
   };
 
+  const handleChangePassword = async () => {
+    const token = localStorage.getItem('jwt');
+    if (!token) return;
+
+    try {
+      const baseUrl = process.env.REACT_APP_API_BASE_URL || 'https://localhost:8072/atozmart';
+      const requestBody = {
+        oldPassword: oldPassword,
+        newPassword: newPassword,
+      };
+      const response = await axios.patch(
+        `${baseUrl}/authserver/change-password`,
+        requestBody,
+        { headers: { 'Authorization': `Bearer ${token}` } }
+      );
+      if (response.status === 202) {
+        setChangePasswordOpen(false);
+        setOldPassword('');
+        setNewPassword('');
+        toast.success('Password changed successfully!');
+      }
+    } catch (error: any) {
+      const errorData = error.response?.data || { errorMsg: 'Failed to change password' };
+      toast.error(errorData.errorMsg);
+    }
+  };
+
   const isAddAddressDisabled = profile?.addressDetails.length >= 3;
   const existingAddressTypes = profile?.addressDetails.map(a => a.addressType) || [];
 
@@ -319,6 +319,7 @@ const Profile: React.FC = () => {
           <Typography>Email: {profile.basicDetails.mail}</Typography>
           <Typography>Mobile: {profile.basicDetails.mobileNo}</Typography>
           <Button onClick={() => { setBasicDetails({ firstName: profile.basicDetails.firstName, lastName: profile.basicDetails.lastName, mail: profile.basicDetails.mail, mobileNo: profile.basicDetails.mobileNo }); setEditBasicOpen(true); }}>Edit Basic Details</Button>
+          <Button onClick={() => setChangePasswordOpen(true)} sx={{ ml: 2 }}>Change Password</Button>
 
           <Typography variant="h6" sx={{ mt: 2 }}>Address Details</Typography>
           {profile.addressDetails.map((address) => (
@@ -339,7 +340,7 @@ const Profile: React.FC = () => {
             </AccordionSummary>
             <AccordionDetails>
               {orders.map((order) => (
-                <Accordion key={order.orderId} onChange={(_, expanded) => { if (expanded && !orderDetails[order.orderId]) fetchOrderDetails(order.orderId); }}>
+                <Accordion key={order.orderId} onChange={(_, expanded) => { if (expanded && !orderDetails[order.orderId]) fetchOrderDetails(orderId); }}>
                   <AccordionSummary expandIcon={<ExpandMoreIcon />}>
                     <Typography>Order ID: {order.orderId} | Delivery Status: {order.deliveryStatus} | Ordered On: {order.orderedOn}</Typography>
                   </AccordionSummary>
@@ -376,7 +377,10 @@ const Profile: React.FC = () => {
           </Accordion>
         </>
       ) : (
-        <Typography>Loading profile...</Typography>
+        <Box sx={{ p: 2, textAlign: 'center' }}>
+          <Typography>No profile found. Please create one.</Typography>
+          <Button onClick={() => navigate('/create-profile')} variant="contained" sx={{ mt: 2 }}>Create Profile</Button>
+        </Box>
       )}
       <Dialog open={editBasicOpen} onClose={() => setEditBasicOpen(false)}>
         <DialogTitle>Edit Basic Details</DialogTitle>
@@ -416,25 +420,6 @@ const Profile: React.FC = () => {
         </DialogActions>
       </Dialog>
 
-      <Dialog open={createProfileOpen} onClose={() => setCreateProfileOpen(false)}>
-        <DialogTitle>Create Profile</DialogTitle>
-        <DialogContent>
-          <TextField label="First Name" value={basicDetails.firstName || ''} onChange={(e) => setBasicDetails({ ...basicDetails, firstName: e.target.value })} sx={{ mb: 2 }} fullWidth />
-          <TextField label="Last Name" value={basicDetails.lastName || ''} onChange={(e) => setBasicDetails({ ...basicDetails, lastName: e.target.value })} sx={{ mb: 2 }} fullWidth />
-          <TextField label="Email" value={basicDetails.mail || ''} onChange={(e) => setBasicDetails({ ...basicDetails, mail: e.target.value })} sx={{ mb: 2 }} fullWidth />
-          <TextField label="Mobile" value={basicDetails.mobileNo || ''} onChange={(e) => setBasicDetails({ ...basicDetails, mobileNo: e.target.value })} sx={{ mb: 2 }} fullWidth />
-          <TextField label="Add Line 1" value={addressDetails.addLine1} onChange={(e) => setAddressDetails({ ...addressDetails, addLine1: e.target.value })} sx={{ mb: 2 }} fullWidth />
-          <TextField label="Add Line 2" value={addressDetails.addLine2} onChange={(e) => setAddressDetails({ ...addressDetails, addLine2: e.target.value })} sx={{ mb: 2 }} fullWidth />
-          <TextField label="Add Line 3" value={addressDetails.addLine3} onChange={(e) => setAddressDetails({ ...addressDetails, addLine3: e.target.value })} sx={{ mb: 2 }} fullWidth />
-          <TextField label="Pincode" value={addressDetails.pincode} onChange={(e) => setAddressDetails({ ...addressDetails, pincode: e.target.value })} sx={{ mb: 2 }} fullWidth />
-          <TextField label="Country" value={addressDetails.country} onChange={(e) => setAddressDetails({ ...addressDetails, country: e.target.value })} sx={{ mb: 2 }} fullWidth />
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setCreateProfileOpen(false)}>Cancel</Button>
-          <Button onClick={handleCreateProfile}>Create</Button>
-        </DialogActions>
-      </Dialog>
-
       <Dialog open={addAddressOpen} onClose={() => setAddAddressOpen(false)}>
         <DialogTitle>Add Address</DialogTitle>
         <DialogContent>
@@ -456,6 +441,32 @@ const Profile: React.FC = () => {
         <DialogActions>
           <Button onClick={() => setAddAddressOpen(false)}>Cancel</Button>
           <Button onClick={handleAddAddress}>Add</Button>
+        </DialogActions>
+      </Dialog>
+
+      <Dialog open={changePasswordOpen} onClose={() => { setChangePasswordOpen(false); setOldPassword(''); setNewPassword(''); }}>
+        <DialogTitle>Change Password</DialogTitle>
+        <DialogContent>
+          <TextField
+            label="Old Password"
+            type="password"
+            value={oldPassword}
+            onChange={(e) => setOldPassword(e.target.value)}
+            sx={{ mb: 2 }}
+            fullWidth
+          />
+          <TextField
+            label="New Password"
+            type="password"
+            value={newPassword}
+            onChange={(e) => setNewPassword(e.target.value)}
+            sx={{ mb: 2 }}
+            fullWidth
+          />
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => { setChangePasswordOpen(false); setOldPassword(''); setNewPassword(''); }}>Cancel</Button>
+          <Button onClick={handleChangePassword} disabled={!oldPassword || !newPassword}>Save</Button>
         </DialogActions>
       </Dialog>
     </Box>
