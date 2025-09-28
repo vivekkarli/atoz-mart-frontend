@@ -16,6 +16,7 @@ import Profile from './pages/Profile';
 import PrivateRoute from './components/PrivateRoute';
 import OAuthCallback from './pages/OAuthCallback';
 import CreateProfile from './pages/CreateProfile';
+import ConfirmEmail from './pages/ConfirmEmail';
 
 const App: React.FC = () => {
   return (
@@ -33,6 +34,7 @@ const App: React.FC = () => {
           <Route path="/checkout" element={<PrivateRoute><Checkout /></PrivateRoute>} />
           <Route path="/profile" element={<PrivateRoute><Profile /></PrivateRoute>} />
           <Route path="/create-profile" element={<CreateProfile />} />
+          <Route path="/confirm-email" element={<ConfirmEmail />} />
           <Route path="/oauth-callback" element={<OAuthCallback />} />
         </Routes>
       </Router>
