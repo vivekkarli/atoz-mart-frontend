@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { Box, Typography, Button, Select, MenuItem, FormControl, InputLabel, TextField, Dialog, DialogTitle, DialogContent, DialogActions, Accordion, AccordionSummary, AccordionDetails, Card, CardContent } from '@mui/material';
+import { Box, Typography, Button, Select, MenuItem, FormControl, InputLabel, TextField, Dialog, DialogTitle, DialogContent, DialogActions, Accordion, AccordionSummary, AccordionDetails, Card, CardContent, CardMedia, Grid, Stack } from '@mui/material';
 import { useNavigate, useLocation } from 'react-router-dom';
 import axios from 'axios';
 import { toast } from 'react-toastify';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
+import { getItemImages } from '../services/imageService';
 
 interface BasicDetails {
   username?: string;
@@ -30,6 +31,15 @@ interface OrderSummary {
   orderedOn: string;
 }
 
+interface OrderItem {
+  itemId: string;
+  itemName: string;
+  unitPrice: number;
+  quantity: number;
+  effectivePrice: number;
+  imageUrl?: string;
+}
+
 interface OrderDetail {
   orderId: number;
   paymentStatus: string;
@@ -37,7 +47,7 @@ interface OrderDetail {
   orderStatus: string;
   orderTotal: number;
   orderedOn: string;
-  orderItems: { itemId: string; itemName: string; unitPrice: number; quantity: number; effectivePrice: number }[] | null;
+  orderItems: OrderItem[] | null;
 }
 
 interface ProfileResponse {
@@ -71,10 +81,7 @@ const Profile: React.FC = () => {
 
     try {
       const baseUrl = process.env.REACT_APP_API_BASE_URL || 'https://localhost:8072/atozmart';
-      const response = await axios.get(
-        `${baseUrl}/profile/profile`,
-        { headers: { 'Authorization': `Bearer ${token}` } }
-      );
+      const response = await axios.get(`${baseUrl}/profile/profile`, { headers: { 'Authorization': `Bearer ${token}` } });
       if (response.status === 200) {
         setProfile(response.data);
         toast.success('Profile loaded successfully');
@@ -98,10 +105,7 @@ const Profile: React.FC = () => {
 
     try {
       const baseUrl = process.env.REACT_APP_API_BASE_URL || 'https://localhost:8072/atozmart';
-      const response = await axios.get(
-        `${baseUrl}/order/orders`,
-        { headers: { 'Authorization': `Bearer ${token}` } }
-      );
+      const response = await axios.get(`${baseUrl}/order/orders`, { headers: { 'Authorization': `Bearer ${token}` } });
       if (response.status === 200) {
         setOrders(response.data.map((order: any) => ({
           orderId: order.orderId,
@@ -122,18 +126,26 @@ const Profile: React.FC = () => {
 
     try {
       const baseUrl = process.env.REACT_APP_API_BASE_URL || 'https://localhost:8072/atozmart';
-      const response = await axios.get(
-        `${baseUrl}/order/orders?orderId=${orderId}`,
-        { headers: { 'Authorization': `Bearer ${token}` } }
-      );
+      const response = await axios.get(`${baseUrl}/order/orders?orderId=${orderId}`, { headers: { 'Authorization': `Bearer ${token}` } });
       if (response.status === 200) {
-        setOrderDetails(prev => ({
-          ...prev,
-          [orderId]: {
-            ...response.data[0],
-            orderedOn: new Date(response.data[0].orderedOn).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })
-          }
-        }));
+        let detail = {
+          ...response.data[0],
+          orderedOn: new Date(response.data[0].orderedOn).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })
+        };
+
+        if (detail.orderItems) {
+          const itemIds = detail.orderItems.map(item => item.itemId);
+          const images = await getItemImages(itemIds);
+          const imageMap = images.reduce((acc: { [key: string]: string }, img: { itemId: string; location: string }) => {
+            acc[img.itemId] = img.location;
+            return acc;
+          }, {});
+          detail.orderItems = detail.orderItems.map(item => ({
+            ...item,
+            imageUrl: imageMap[item.itemId] || 'https://via.placeholder.com/150?text=Image+Not+Available',
+          }));
+        }
+        setOrderDetails(prev => ({ ...prev, [orderId]: detail }));
         toast.success(`Order ${orderId} details loaded`);
       }
     } catch (error: any) {
@@ -149,11 +161,7 @@ const Profile: React.FC = () => {
     try {
       const baseUrl = process.env.REACT_APP_API_BASE_URL || 'https://localhost:8072/atozmart';
       const requestBody = { basicDetails: { firstName: basicDetails.firstName, lastName: basicDetails.lastName, mail: basicDetails.mail, mobileNo: basicDetails.mobileNo }, addressDetails: null };
-      const response = await axios.patch(
-        `${baseUrl}/profile/profile`,
-        requestBody,
-        { headers: { 'Authorization': `Bearer ${token}` } }
-      );
+      const response = await axios.patch(`${baseUrl}/profile/profile`, requestBody, { headers: { 'Authorization': `Bearer ${token}` } });
       if (response.status === 200) {
         setEditBasicOpen(false);
         fetchProfile();
@@ -177,11 +185,7 @@ const Profile: React.FC = () => {
         requestBody.addressDetails.push({ ...existingAddress, addressType: selectedAddressType, addressDesc: addressDetails.addressDesc });
         addressDetails.addressDesc = existingAddress.addressDesc;
       }
-      const response = await axios.patch(
-        `${baseUrl}/profile/profile`,
-        requestBody,
-        { headers: { 'Authorization': `Bearer ${token}` } }
-      );
+      const response = await axios.patch(`${baseUrl}/profile/profile`, requestBody, { headers: { 'Authorization': `Bearer ${token}` } });
       if (response.status === 200) {
         setEditAddressOpen(false);
         fetchProfile();
@@ -200,11 +204,7 @@ const Profile: React.FC = () => {
     try {
       const baseUrl = process.env.REACT_APP_API_BASE_URL || 'https://localhost:8072/atozmart';
       const requestBody = { basicDetails: { firstName: profile?.basicDetails.firstName, lastName: profile?.basicDetails.lastName, mail: profile?.basicDetails.mail, mobileNo: profile?.basicDetails.mobileNo }, addressDetails: [{ ...addressDetails, defaultAddress: false }] };
-      const response = await axios.patch(
-        `${baseUrl}/profile/profile`,
-        requestBody,
-        { headers: { 'Authorization': `Bearer ${token}` } }
-      );
+      const response = await axios.patch(`${baseUrl}/profile/profile`, requestBody, { headers: { 'Authorization': `Bearer ${token}` } });
       if (response.status === 200) {
         setAddAddressOpen(false);
         fetchProfile();
@@ -222,11 +222,7 @@ const Profile: React.FC = () => {
 
     try {
       const baseUrl = process.env.REACT_APP_API_BASE_URL || 'https://localhost:8072/atozmart';
-      const response = await axios.patch(
-        `${baseUrl}/profile/profile/address?addressType=${addressType}`,
-        {},
-        { headers: { 'Authorization': `Bearer ${token}` } }
-      );
+      const response = await axios.patch(`${baseUrl}/profile/profile/address?addressType=${addressType}`, {}, { headers: { 'Authorization': `Bearer ${token}` } });
       if (response.status === 200) {
         fetchProfile();
         toast.success('Default address updated successfully');
@@ -243,10 +239,7 @@ const Profile: React.FC = () => {
 
     try {
       const baseUrl = process.env.REACT_APP_API_BASE_URL || 'https://localhost:8072/atozmart';
-      const response = await axios.delete(
-        `${baseUrl}/profile/profile/address?addressType=${addressType}`,
-        { headers: { 'Authorization': `Bearer ${token}` } }
-      );
+      const response = await axios.delete(`${baseUrl}/profile/profile/address?addressType=${addressType}`, { headers: { 'Authorization': `Bearer ${token}` } });
       if (response.status === 200) {
         fetchProfile();
         toast.success('Address deleted successfully');
@@ -263,10 +256,7 @@ const Profile: React.FC = () => {
 
     try {
       const baseUrl = process.env.REACT_APP_API_BASE_URL || 'https://localhost:8072/atozmart';
-      const response = await axios.delete(
-        `${baseUrl}/profile/profile/address`,
-        { headers: { 'Authorization': `Bearer ${token}` } }
-      );
+      const response = await axios.delete(`${baseUrl}/profile/profile/address`, { headers: { 'Authorization': `Bearer ${token}` } });
       if (response.status === 200) {
         fetchProfile();
         toast.success('All addresses deleted successfully');
@@ -283,16 +273,9 @@ const Profile: React.FC = () => {
 
     try {
       const baseUrl = process.env.REACT_APP_API_BASE_URL || 'https://localhost:8072/atozmart';
-      const requestBody = {
-        oldPassword: oldPassword,
-        newPassword: newPassword,
-      };
-      const response = await axios.patch(
-        `${baseUrl}/authserver/change-password`,
-        requestBody,
-        { headers: { 'Authorization': `Bearer ${token}` } }
-      );
-      if (response.status === 202) {
+      const requestBody = { oldPassword, newPassword };
+      const response = await axios.patch(`${baseUrl}/authserver/change-password`, requestBody, { headers: { 'Authorization': `Bearer ${token}` } });
+      if (response.status === 201) {
         setChangePasswordOpen(false);
         setOldPassword('');
         setNewPassword('');
@@ -308,165 +291,236 @@ const Profile: React.FC = () => {
   const existingAddressTypes = profile?.addressDetails.map(a => a.addressType) || [];
 
   return (
-    <Box sx={{ p: 2 }}>
-      <Typography variant="h4" gutterBottom>Profile</Typography>
+    <Box sx={{ p: 4, bgcolor: '#f9f9f9', minHeight: '100vh' }}>
+      <Typography variant="h3" fontWeight="bold" color="primary" gutterBottom>
+        My Profile
+      </Typography>
       {profile ? (
-        <>
-          <Typography variant="h6">Basic Details</Typography>
-          <Typography>Username: {profile.basicDetails.username}</Typography>
-          <Typography>First Name: {profile.basicDetails.firstName}</Typography>
-          <Typography>Last Name: {profile.basicDetails.lastName}</Typography>
-          <Typography>Email: {profile.basicDetails.mail}</Typography>
-          <Typography>Mobile: {profile.basicDetails.mobileNo}</Typography>
-          <Button onClick={() => { setBasicDetails({ firstName: profile.basicDetails.firstName, lastName: profile.basicDetails.lastName, mail: profile.basicDetails.mail, mobileNo: profile.basicDetails.mobileNo }); setEditBasicOpen(true); }}>Edit Basic Details</Button>
-          <Button onClick={() => setChangePasswordOpen(true)} sx={{ ml: 2 }}>Change Password</Button>
+        <Grid container spacing={4}>
+          {/* Basic Details Section */}
+          <Grid item xs={12} md={4}>
+            <Card sx={{ p: 3, boxShadow: 3, borderRadius: 2 }}>
+              <CardContent>
+                <Typography variant="h5" fontWeight="medium" gutterBottom>
+                  Basic Details
+                </Typography>
+                <Stack spacing={1}>
+                  <Typography variant="body1"><strong>Username:</strong> {profile.basicDetails.username}</Typography>
+                  <Typography variant="body1"><strong>First Name:</strong> {profile.basicDetails.firstName}</Typography>
+                  <Typography variant="body1"><strong>Last Name:</strong> {profile.basicDetails.lastName}</Typography>
+                  <Typography variant="body1"><strong>Email:</strong> {profile.basicDetails.mail}</Typography>
+                  <Typography variant="body1"><strong>Mobile:</strong> {profile.basicDetails.mobileNo}</Typography>
+                </Stack>
+                <Stack direction="row" spacing={2} sx={{ mt: 3 }}>
+                  <Button variant="contained" color="primary" onClick={() => { setBasicDetails({ firstName: profile.basicDetails.firstName, lastName: profile.basicDetails.lastName, mail: profile.basicDetails.mail, mobileNo: profile.basicDetails.mobileNo }); setEditBasicOpen(true); }}>
+                    Edit
+                  </Button>
+                  <Button variant="outlined" color="secondary" onClick={() => setChangePasswordOpen(true)}>
+                    Change Password
+                  </Button>
+                </Stack>
+              </CardContent>
+            </Card>
+          </Grid>
 
-          <Typography variant="h6" sx={{ mt: 2 }}>Address Details</Typography>
-          {profile.addressDetails.map((address) => (
-            <Box key={address.addressType} sx={{ mb: 2, p: 2, border: '1px solid #ccc', borderRadius: 2 }}>
-              <Typography>{`${address.addLine1}, ${address.addLine2}, ${address.addLine3}, ${address.pincode}, ${address.country} (${address.addressType}${address.defaultAddress ? ' - Default' : ''})`}</Typography>
-              <Button onClick={() => { setAddressDetails(address); setEditAddressOpen(true); setSelectedAddressType(address.addressType); }}>Edit</Button>
-              <Button onClick={() => handleChangeDefaultAddress(address.addressType)} disabled={address.defaultAddress}>Set as Default</Button>
-              <Button onClick={() => handleDeleteAddress(address.addressType)}>Delete</Button>
-            </Box>
-          ))}
-          <Button onClick={handleDeleteAllAddresses}>Delete All Addresses</Button>
-          <Button onClick={() => setAddAddressOpen(true)} disabled={isAddAddressDisabled}>Add Address</Button>
+          {/* Address Details Section */}
+          <Grid item xs={12} md={8}>
+            <Card sx={{ p: 3, boxShadow: 3, borderRadius: 2 }}>
+              <CardContent>
+                <Typography variant="h5" fontWeight="medium" gutterBottom>
+                  Address Details
+                </Typography>
+                {profile.addressDetails.map((address) => (
+                  <Box key={address.addressType} sx={{ mb: 2, p: 2, bgcolor: '#fff', borderRadius: 1, boxShadow: 1 }}>
+                    <Typography variant="body1">{`${address.addLine1}, ${address.addLine2}, ${address.addLine3}, ${address.pincode}, ${address.country} (${address.addressType}${address.defaultAddress ? ' - Default' : ''})`}</Typography>
+                    <Stack direction="row" spacing={1} sx={{ mt: 1 }}>
+                      <Button variant="outlined" size="small" onClick={() => { setAddressDetails(address); setEditAddressOpen(true); setSelectedAddressType(address.addressType); }}>
+                        Edit
+                      </Button>
+                      <Button variant="outlined" size="small" disabled={address.defaultAddress} onClick={() => handleChangeDefaultAddress(address.addressType)}>
+                        Set as Default
+                      </Button>
+                      <Button variant="outlined" size="small" color="error" onClick={() => handleDeleteAddress(address.addressType)}>
+                        Delete
+                      </Button>
+                    </Stack>
+                  </Box>
+                ))}
+                <Stack direction="row" spacing={2} sx={{ mt: 2 }}>
+                  <Button variant="contained" color="error" onClick={handleDeleteAllAddresses}>
+                    Delete All
+                  </Button>
+                  <Button variant="contained" color="primary" disabled={isAddAddressDisabled} onClick={() => setAddAddressOpen(true)}>
+                    Add Address
+                  </Button>
+                </Stack>
+              </CardContent>
+            </Card>
+          </Grid>
 
-          <Typography variant="h6" sx={{ mt: 2 }}>Order Details</Typography>
-          <Accordion onChange={(_, expanded) => { if (expanded && orders.length === 0) fetchOrders(); }}>
-            <AccordionSummary expandIcon={<ExpandMoreIcon />}>
-              <Typography>View Orders</Typography>
-            </AccordionSummary>
-            <AccordionDetails>
-              {orders.map((order) => (
-                <Accordion key={order.orderId} onChange={(_, expanded) => { if (expanded && !orderDetails[order.orderId]) fetchOrderDetails(orderId); }}>
+          {/* Order Details Section */}
+          <Grid item xs={12}>
+            <Card sx={{ p: 3, boxShadow: 3, borderRadius: 2 }}>
+              <CardContent>
+                <Typography variant="h5" fontWeight="medium" gutterBottom>
+                  Order History
+                </Typography>
+                <Accordion onChange={(_, expanded) => { if (expanded && orders.length === 0) fetchOrders(); }}>
                   <AccordionSummary expandIcon={<ExpandMoreIcon />}>
-                    <Typography>Order ID: {order.orderId} | Delivery Status: {order.deliveryStatus} | Ordered On: {order.orderedOn}</Typography>
+                    <Typography>View Orders</Typography>
                   </AccordionSummary>
                   <AccordionDetails>
-                    {orderDetails[order.orderId] && (
-                      <Card sx={{ mb: 2 }}>
-                        <CardContent>
-                          <Typography>Order ID: {orderDetails[order.orderId].orderId}</Typography>
-                          <Typography>Payment Status: {orderDetails[order.orderId].paymentStatus}</Typography>
-                          <Typography>Delivery Status: {orderDetails[order.orderId].deliveryStatus}</Typography>
-                          <Typography>Order Status: {orderDetails[order.orderId].orderStatus}</Typography>
-                          <Typography>Order Total: ${orderDetails[order.orderId].orderTotal.toFixed(2)}</Typography>
-                          <Typography>Ordered On: {orderDetails[order.orderId].orderedOn}</Typography>
-                          {orderDetails[order.orderId].orderItems && orderDetails[order.orderId].orderItems.length > 0 && (
-                            <Box sx={{ mt: 2 }}>
-                              {orderDetails[order.orderId].orderItems.map((item, index) => (
-                                <Card key={index} sx={{ display: 'flex', alignItems: 'center', mb: 2, p: 1, border: '1px solid #eee', borderRadius: 2 }}>
-                                  <img src={`https://via.placeholder.com/50?text=Item+${item.itemId}`} alt={item.itemName} style={{ marginRight: '10px' }} />
-                                  <Box>
-                                    <Typography>{item.itemName}</Typography>
-                                    <Typography>Price: ${item.unitPrice.toFixed(2)} x {item.quantity} = ${item.effectivePrice.toFixed(2)}</Typography>
+                    {orders.map((order) => (
+                      <Accordion key={order.orderId} onChange={(_, expanded) => { if (expanded && !orderDetails[order.orderId]) fetchOrderDetails(order.orderId); }}>
+                        <AccordionSummary expandIcon={<ExpandMoreIcon />}>
+                          <Typography>Order ID: {order.orderId} | Status: {order.deliveryStatus} | Date: {order.orderedOn}</Typography>
+                        </AccordionSummary>
+                        <AccordionDetails>
+                          {orderDetails[order.orderId] && (
+                            <Card sx={{ mb: 2 }}>
+                              <CardContent>
+                                <Typography variant="body1"><strong>Order ID:</strong> {orderDetails[order.orderId].orderId}</Typography>
+                                <Typography variant="body1"><strong>Payment Status:</strong> {orderDetails[order.orderId].paymentStatus}</Typography>
+                                <Typography variant="body1"><strong>Delivery Status:</strong> {orderDetails[order.orderId].deliveryStatus}</Typography>
+                                <Typography variant="body1"><strong>Order Status:</strong> {orderDetails[order.orderId].orderStatus}</Typography>
+                                <Typography variant="body1"><strong>Total:</strong> ${orderDetails[order.orderId].orderTotal.toFixed(2)}</Typography>
+                                <Typography variant="body1"><strong>Date:</strong> {orderDetails[order.orderId].orderedOn}</Typography>
+                                {orderDetails[order.orderId].orderItems && orderDetails[order.orderId].orderItems.length > 0 && (
+                                  <Box sx={{ mt: 2 }}>
+                                    {orderDetails[order.orderId].orderItems.map((item, index) => (
+                                      <Card key={index} sx={{ display: 'flex', alignItems: 'center', mb: 2, p: 2, bgcolor: '#fff', borderRadius: 1, boxShadow: 1 }}>
+                                        <CardMedia
+                                          component="img"
+                                          height="50"
+                                          image={item.imageUrl || 'https://via.placeholder.com/50?text=No+Image'}
+                                          alt={item.itemName}
+                                          sx={{ mr: 2, objectFit: 'contain' }}
+                                        />
+                                        <Stack>
+                                          <Typography variant="body2" fontWeight="medium">{item.itemName}</Typography>
+                                          <Typography variant="body2">Price: ${item.unitPrice.toFixed(2)} x {item.quantity} = ${item.effectivePrice.toFixed(2)}</Typography>
+                                        </Stack>
+                                      </Card>
+                                    ))}
                                   </Box>
-                                </Card>
-                              ))}
-                            </Box>
+                                )}
+                              </CardContent>
+                            </Card>
                           )}
-                        </CardContent>
-                      </Card>
-                    )}
+                        </AccordionDetails>
+                      </Accordion>
+                    ))}
                   </AccordionDetails>
                 </Accordion>
-              ))}
-            </AccordionDetails>
-          </Accordion>
-        </>
+              </CardContent>
+            </Card>
+          </Grid>
+        </Grid>
       ) : (
-        <Box sx={{ p: 2, textAlign: 'center' }}>
-          <Typography>No profile found. Please create one.</Typography>
-          <Button onClick={() => navigate('/create-profile')} variant="contained" sx={{ mt: 2 }}>Create Profile</Button>
+        <Box sx={{ p: 4, textAlign: 'center', bgcolor: '#fff', borderRadius: 2, boxShadow: 3 }}>
+          <Typography variant="h6" color="text.secondary">
+            No profile found. Please create one.
+          </Typography>
+          <Button variant="contained" color="primary" sx={{ mt: 2 }} onClick={() => navigate('/create-profile')}>
+            Create Profile
+          </Button>
         </Box>
       )}
+
+      {/* Edit Basic Details Dialog */}
       <Dialog open={editBasicOpen} onClose={() => setEditBasicOpen(false)}>
         <DialogTitle>Edit Basic Details</DialogTitle>
         <DialogContent>
-          <TextField label="First Name" value={basicDetails.firstName || ''} onChange={(e) => setBasicDetails({ ...basicDetails, firstName: e.target.value })} sx={{ mb: 2 }} fullWidth />
-          <TextField label="Last Name" value={basicDetails.lastName || ''} onChange={(e) => setBasicDetails({ ...basicDetails, lastName: e.target.value })} sx={{ mb: 2 }} fullWidth />
-          <TextField label="Email" value={basicDetails.mail || ''} onChange={(e) => setBasicDetails({ ...basicDetails, mail: e.target.value })} sx={{ mb: 2 }} fullWidth />
-          <TextField label="Mobile" value={basicDetails.mobileNo || ''} onChange={(e) => setBasicDetails({ ...basicDetails, mobileNo: e.target.value })} sx={{ mb: 2 }} fullWidth />
+          <Stack spacing={2}>
+            <TextField label="First Name" value={basicDetails.firstName || ''} onChange={(e) => setBasicDetails({ ...basicDetails, firstName: e.target.value })} fullWidth />
+            <TextField label="Last Name" value={basicDetails.lastName || ''} onChange={(e) => setBasicDetails({ ...basicDetails, lastName: e.target.value })} fullWidth />
+            <TextField label="Email" value={basicDetails.mail || ''} onChange={(e) => setBasicDetails({ ...basicDetails, mail: e.target.value })} fullWidth />
+            <TextField label="Mobile" value={basicDetails.mobileNo || ''} onChange={(e) => setBasicDetails({ ...basicDetails, mobileNo: e.target.value })} fullWidth />
+          </Stack>
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setEditBasicOpen(false)}>Cancel</Button>
-          <Button onClick={handleEditBasic}>Save</Button>
+          <Button variant="contained" onClick={handleEditBasic}>Save</Button>
         </DialogActions>
       </Dialog>
 
+      {/* Edit Address Dialog */}
       <Dialog open={editAddressOpen} onClose={() => setEditAddressOpen(false)}>
         <DialogTitle>Edit Address</DialogTitle>
         <DialogContent>
-          <FormControl sx={{ minWidth: 120, mb: 2 }} fullWidth>
-            <InputLabel>Address Type</InputLabel>
-            <Select value={addressDetails.addressType} onChange={(e) => setAddressDetails({ ...addressDetails, addressType: e.target.value as string })}>
-              <MenuItem value="home">Home</MenuItem>
-              <MenuItem value="work">Work</MenuItem>
-              <MenuItem value="others">Others</MenuItem>
-            </Select>
-          </FormControl>
-          <TextField label="Address Desc" value={addressDetails.addressDesc || ''} onChange={(e) => setAddressDetails({ ...addressDetails, addressDesc: e.target.value || null })} sx={{ mb: 2 }} fullWidth />
-          <TextField label="Add Line 1" value={addressDetails.addLine1} onChange={(e) => setAddressDetails({ ...addressDetails, addLine1: e.target.value })} sx={{ mb: 2 }} fullWidth />
-          <TextField label="Add Line 2" value={addressDetails.addLine2} onChange={(e) => setAddressDetails({ ...addressDetails, addLine2: e.target.value })} sx={{ mb: 2 }} fullWidth />
-          <TextField label="Add Line 3" value={addressDetails.addLine3} onChange={(e) => setAddressDetails({ ...addressDetails, addLine3: e.target.value })} sx={{ mb: 2 }} fullWidth />
-          <TextField label="Pincode" value={addressDetails.pincode} onChange={(e) => setAddressDetails({ ...addressDetails, pincode: e.target.value })} sx={{ mb: 2 }} fullWidth />
-          <TextField label="Country" value={addressDetails.country} onChange={(e) => setAddressDetails({ ...addressDetails, country: e.target.value })} sx={{ mb: 2 }} fullWidth />
+          <Stack spacing={2}>
+            <FormControl fullWidth>
+              <InputLabel>Address Type</InputLabel>
+              <Select value={addressDetails.addressType} onChange={(e) => setAddressDetails({ ...addressDetails, addressType: e.target.value as string })}>
+                <MenuItem value="home">Home</MenuItem>
+                <MenuItem value="work">Work</MenuItem>
+                <MenuItem value="others">Others</MenuItem>
+              </Select>
+            </FormControl>
+            <TextField label="Address Description" value={addressDetails.addressDesc || ''} onChange={(e) => setAddressDetails({ ...addressDetails, addressDesc: e.target.value || null })} fullWidth />
+            <TextField label="Address Line 1" value={addressDetails.addLine1} onChange={(e) => setAddressDetails({ ...addressDetails, addLine1: e.target.value })} fullWidth />
+            <TextField label="Address Line 2" value={addressDetails.addLine2} onChange={(e) => setAddressDetails({ ...addressDetails, addLine2: e.target.value })} fullWidth />
+            <TextField label="Address Line 3" value={addressDetails.addLine3} onChange={(e) => setAddressDetails({ ...addressDetails, addLine3: e.target.value })} fullWidth />
+            <TextField label="Pincode" value={addressDetails.pincode} onChange={(e) => setAddressDetails({ ...addressDetails, pincode: e.target.value })} fullWidth />
+            <TextField label="Country" value={addressDetails.country} onChange={(e) => setAddressDetails({ ...addressDetails, country: e.target.value })} fullWidth />
+          </Stack>
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setEditAddressOpen(false)}>Cancel</Button>
-          <Button onClick={handleEditAddress}>Save</Button>
+          <Button variant="contained" onClick={handleEditAddress}>Save</Button>
         </DialogActions>
       </Dialog>
 
-      <Dialog open={addAddressOpen} onClose={() => setAddAddressOpen(false)}>
+            <Dialog open={addAddressOpen} onClose={() => setAddAddressOpen(false)}>
         <DialogTitle>Add Address</DialogTitle>
         <DialogContent>
-          <FormControl sx={{ minWidth: 120, mb: 2 }} fullWidth>
-            <InputLabel>Address Type</InputLabel>
-            <Select value={addressDetails.addressType} onChange={(e) => setAddressDetails({ ...addressDetails, addressType: e.target.value as string })}>
-              <MenuItem value="home" disabled={existingAddressTypes.includes('home')}>Home</MenuItem>
-              <MenuItem value="work" disabled={existingAddressTypes.includes('work')}>Work</MenuItem>
-              <MenuItem value="others" disabled={existingAddressTypes.includes('others')}>Others</MenuItem>
-            </Select>
-          </FormControl>
-          <TextField label="Address Desc" value={addressDetails.addressDesc || ''} onChange={(e) => setAddressDetails({ ...addressDetails, addressDesc: e.target.value || null })} sx={{ mb: 2 }} fullWidth />
-          <TextField label="Add Line 1" value={addressDetails.addLine1} onChange={(e) => setAddressDetails({ ...addressDetails, addLine1: e.target.value })} sx={{ mb: 2 }} fullWidth />
-          <TextField label="Add Line 2" value={addressDetails.addLine2} onChange={(e) => setAddressDetails({ ...addressDetails, addLine2: e.target.value })} sx={{ mb: 2 }} fullWidth />
-          <TextField label="Add Line 3" value={addressDetails.addLine3} onChange={(e) => setAddressDetails({ ...addressDetails, addLine3: e.target.value })} sx={{ mb: 2 }} fullWidth />
-          <TextField label="Pincode" value={addressDetails.pincode} onChange={(e) => setAddressDetails({ ...addressDetails, pincode: e.target.value })} sx={{ mb: 2 }} fullWidth />
-          <TextField label="Country" value={addressDetails.country} onChange={(e) => setAddressDetails({ ...addressDetails, country: e.target.value })} sx={{ mb: 2 }} fullWidth />
+          <Stack spacing={2}>
+            <FormControl fullWidth>
+              <InputLabel>Address Type</InputLabel>
+              <Select value={addressDetails.addressType} onChange={(e) => setAddressDetails({ ...addressDetails, addressType: e.target.value as string })}>
+                <MenuItem value="home" disabled={existingAddressTypes.includes('home')}>Home</MenuItem>
+                <MenuItem value="work" disabled={existingAddressTypes.includes('work')}>Work</MenuItem>
+                <MenuItem value="others" disabled={existingAddressTypes.includes('others')}>Others</MenuItem>
+              </Select>
+            </FormControl>
+            <TextField label="Address Description" value={addressDetails.addressDesc || ''} onChange={(e) => setAddressDetails({ ...addressDetails, addressDesc: e.target.value || null })} fullWidth />
+            <TextField label="Address Line 1" value={addressDetails.addLine1} onChange={(e) => setAddressDetails({ ...addressDetails, addLine1: e.target.value })} fullWidth />
+            <TextField label="Address Line 2" value={addressDetails.addLine2} onChange={(e) => setAddressDetails({ ...addressDetails, addLine2: e.target.value })} fullWidth />
+            <TextField label="Address Line 3" value={addressDetails.addLine3} onChange={(e) => setAddressDetails({ ...addressDetails, addLine3: e.target.value })} fullWidth />
+            <TextField label="Pincode" value={addressDetails.pincode} onChange={(e) => setAddressDetails({ ...addressDetails, pincode: e.target.value })} fullWidth />
+            <TextField label="Country" value={addressDetails.country} onChange={(e) => setAddressDetails({ ...addressDetails, country: e.target.value })} fullWidth />
+          </Stack>
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setAddAddressOpen(false)}>Cancel</Button>
-          <Button onClick={handleAddAddress}>Add</Button>
+          <Button variant="contained" onClick={handleAddAddress}>Add</Button>
         </DialogActions>
       </Dialog>
 
+      {/* Change Password Dialog */}
       <Dialog open={changePasswordOpen} onClose={() => { setChangePasswordOpen(false); setOldPassword(''); setNewPassword(''); }}>
         <DialogTitle>Change Password</DialogTitle>
         <DialogContent>
-          <TextField
-            label="Old Password"
-            type="password"
-            value={oldPassword}
-            onChange={(e) => setOldPassword(e.target.value)}
-            sx={{ mb: 2 }}
-            fullWidth
-          />
-          <TextField
-            label="New Password"
-            type="password"
-            value={newPassword}
-            onChange={(e) => setNewPassword(e.target.value)}
-            sx={{ mb: 2 }}
-            fullWidth
-          />
+          <Stack spacing={2}>
+            <TextField
+              label="Old Password"
+              type="password"
+              value={oldPassword}
+              onChange={(e) => setOldPassword(e.target.value)}
+              fullWidth
+            />
+            <TextField
+              label="New Password"
+              type="password"
+              value={newPassword}
+              onChange={(e) => setNewPassword(e.target.value)}
+              fullWidth
+            />
+          </Stack>
         </DialogContent>
         <DialogActions>
           <Button onClick={() => { setChangePasswordOpen(false); setOldPassword(''); setNewPassword(''); }}>Cancel</Button>
-          <Button onClick={handleChangePassword} disabled={!oldPassword || !newPassword}>Save</Button>
+          <Button variant="contained" disabled={!oldPassword || !newPassword} onClick={handleChangePassword}>Save</Button>
         </DialogActions>
       </Dialog>
     </Box>
