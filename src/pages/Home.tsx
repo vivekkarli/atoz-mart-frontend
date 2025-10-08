@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { Box, Grid, Card, CardContent, CardActions, Button, Typography, TextField, MenuItem, Select, FormControl, InputLabel, Dialog, DialogTitle, DialogContent, DialogContentText, DialogActions } from '@mui/material';
+import { Box, Grid, Card, CardContent, CardActions, Button, Typography, TextField, MenuItem, Select, FormControl, InputLabel, Dialog, DialogTitle, DialogContent, DialogContentText, DialogActions, Skeleton } from '@mui/material';
 import { Add, Remove, AddShoppingCart, FavoriteBorder } from '@mui/icons-material';
 import { getItems, getCategories } from '../services/productService';
+import { getItemImages } from '../services/imageService';
 import axios from 'axios';
 import { toast } from 'react-toastify';
 
@@ -12,7 +13,6 @@ const cleanParams = (params: any) => {
     if (cleaned[key] === '' || cleaned[key] === undefined || cleaned[key] === null) {
       delete cleaned[key];
     }
-    // Convert numeric strings to numbers for price range if they exist
     if (key === 'fromPriceRange' || key === 'toPriceRange') {
       cleaned[key] = cleaned[key] ? Number(cleaned[key]) : undefined;
       if (cleaned[key] === undefined || isNaN(cleaned[key])) delete cleaned[key];
@@ -28,14 +28,14 @@ interface Item {
   details: string;
   category: string;
   quantity?: number;
-  imageUrl?: string; // Optional image URL, will be undefined for now
+  imageUrl?: string;
 }
 
 const Home: React.FC = () => {
   const [items, setItems] = useState<Item[]>([]);
   const [totalPages, setTotalPages] = useState(0);
   const [currentPage, setCurrentPage] = useState(1);
-  const [pageSize] = useState(10); // Configurable page size
+  const [pageSize] = useState(10);
   const [categories, setCategories] = useState<string[]>([]);
   const [filters, setFilters] = useState({
     category: '',
@@ -54,6 +54,7 @@ const Home: React.FC = () => {
     direction: 'asc',
   });
   const [openLoginDialog, setOpenLoginDialog] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
     const fetchCategories = async () => {
@@ -62,15 +63,15 @@ const Home: React.FC = () => {
         setCategories(data);
         toast.success('Categories loaded successfully');
       } catch (error: any) {
-        const errorData = error.response?.data || { errorMsg: 'Failed to load categories' };
-        toast.error(errorData.errorMsg);
+        toast.error(error.response?.data?.errorMsg || 'Failed to load categories');
       }
     };
     fetchCategories();
   }, []);
 
   useEffect(() => {
-    const fetchItems = async () => {
+    const fetchData = async () => {
+      setIsLoading(true);
       try {
         const params = {
           ...filters,
@@ -78,23 +79,48 @@ const Home: React.FC = () => {
           size: pageSize,
         };
         const cleanedParams = cleanParams(params);
-        const data = await getItems(cleanedParams);
-        const itemsWithoutImages = data.items.map((item: Item) => ({ ...item, quantity: 1 }));
-        setItems(itemsWithoutImages);
-        setTotalPages(data.totalPages);
+        const itemsResponse = await getItems(cleanedParams);
+        const itemIds = itemsResponse.items.map((item: Item) => item.id);
+        let itemsWithImages = itemsResponse.items.map(item => ({
+          ...item,
+          quantity: 1,
+          imageUrl: undefined, // Default to undefined, will be updated below
+        }));
+
+        if (itemIds.length > 0) {
+          const images = await getItemImages(itemIds);
+          const imageMap = images.reduce((acc: { [key: string]: string }, img: { itemId: string; location: string }) => {
+            acc[img.itemId] = img.location;
+            return acc;
+          }, {});
+          itemsWithImages = itemsWithImages.map(item => ({
+            ...item,
+            imageUrl: imageMap[item.id] || 'https://via.placeholder.com/150?text=Image+Not+Available',
+          }));
+        } else {
+          // If no items or images, use placeholder for all
+          itemsWithImages = itemsWithImages.map(item => ({
+            ...item,
+            imageUrl: 'https://via.placeholder.com/150?text=Image+Not+Available',
+          }));
+        }
+
+        setItems(itemsWithImages);
+        setTotalPages(itemsResponse.totalPages);
         toast.success('Items loaded successfully');
       } catch (error: any) {
-        const errorData = error.response?.data || { errorMsg: 'Failed to load items' };
-        if (error.response && error.response.status === 404) {
+        if (error.response?.status === 404) {
           setItems([]);
           setTotalPages(0);
-          toast.error(errorData.errorMsg || 'No items available for the selected filters');
+          toast.error('No items available for the selected filters');
         } else {
-          toast.error(errorData.errorMsg);
+          toast.error('Failed to load items');
         }
+      } finally {
+        setIsLoading(false);
       }
     };
-    fetchItems();
+    fetchData();
   }, [currentPage, filters, pageSize]);
 
   const handleQuantityChange = (id: string, delta: number) => {
@@ -109,28 +135,19 @@ const Home: React.FC = () => {
       setOpenLoginDialog(true);
       return;
     }
-
     const item = items.find(i => i.id === id);
     if (!item) return;
-
     try {
       const baseUrl = process.env.REACT_APP_API_BASE_URL || 'https://localhost:8072/atozmart';
-      const response = await axios.post(
-        `${baseUrl}/cart/items`,
-        {
-          itemId: item.id,
-          itemName: item.name,
-          unitPrice: item.unitPrice,
-          quantity: item.quantity || 1,
-        },
-        { headers: { 'Authorization': `Bearer ${token}` } }
-      );
-      if (response.status === 201) {
-        toast.success(`Added ${item.name} to cart`);
-      }
+      const response = await axios.post(`${baseUrl}/cart/items`, {
+        itemId: item.id,
+        itemName: item.name,
+        unitPrice: item.unitPrice,
+        quantity: item.quantity || 1,
+      }, { headers: { 'Authorization': `Bearer ${token}` } });
+      if (response.status === 201) toast.success(`Added ${item.name} to cart`);
     } catch (error: any) {
-      const errorData = error.response?.data || { errorMsg: 'Failed to add to cart' };
-      toast.error(errorData.errorMsg);
+      toast.error(error.response?.data?.errorMsg || 'Failed to add to cart');
     }
   };
 
@@ -140,31 +157,21 @@ const Home: React.FC = () => {
       setOpenLoginDialog(true);
       return;
     }
-
     try {
       const baseUrl = process.env.REACT_APP_API_BASE_URL || 'https://localhost:8072/atozmart';
-      const response = await axios.post(
-        `${baseUrl}/wishlist/items`,
-        {
-          itemId,
-          itemName,
-          unitPrice,
-        },
-        { headers: { 'Authorization': `Bearer ${token}` } }
-      );
-      if (response.status === 201) {
-        toast.success(`Added ${itemName} to wishlist`);
-      }
+      const response = await axios.post(`${baseUrl}/wishlist/items`, {
+        itemId,
+        itemName,
+        unitPrice,
+      }, { headers: { 'Authorization': `Bearer ${token}` } });
+      if (response.status === 201) toast.success(`Added ${itemName} to wishlist`);
     } catch (error: any) {
-      const errorData = error.response?.data || { errorMsg: 'Failed to add to wishlist' };
-      toast.error(errorData.errorMsg);
+      toast.error(error.response?.data?.errorMsg || 'Failed to add to wishlist');
     }
   };
 
-  const handleInputChange = (event: React.ChangeEvent<{ name?: string; value: string }> | React.ChangeEvent<HTMLInputElement>) => {
-    const { name, value } = 'target' in event
-      ? { name: event.target.name, value: event.target.value }
-      : { name: (event as any).target.name, value: (event as any).target.value as string };
+  const handleInputChange = (event: React.ChangeEvent<{ name?: string; value: string }>) => {
+    const { name, value } = event.target;
     setInputFilters(prev => ({ ...prev, [name || '']: value }));
   };
 
@@ -174,22 +181,8 @@ const Home: React.FC = () => {
   };
 
   const handleRemoveFilters = () => {
-    setFilters({
-      category: '',
-      fromPriceRange: '',
-      toPriceRange: '',
-      name: '',
-      'sort-by': 'name',
-      direction: 'asc',
-    });
-    setInputFilters({
-      category: '',
-      fromPriceRange: '',
-      toPriceRange: '',
-      name: '',
-      'sort-by': 'name',
-      direction: 'asc',
-    });
+    setFilters({ category: '', fromPriceRange: '', toPriceRange: '', name: '', 'sort-by': 'name', direction: 'asc' });
+    setInputFilters({ category: '', fromPriceRange: '', toPriceRange: '', name: '', 'sort-by': 'name', direction: 'asc' });
     setCurrentPage(1);
   };
 
@@ -197,96 +190,90 @@ const Home: React.FC = () => {
   const goToNextPage = () => setCurrentPage(prev => Math.min(prev + 1, totalPages));
   const goToLastPage = () => setCurrentPage(totalPages);
 
-  const handleCloseLoginDialog = () => {
-    setOpenLoginDialog(false);
-  };
+  const handleCloseLoginDialog = () => setOpenLoginDialog(false);
 
   return (
     <Box sx={{ p: 2 }}>
       <Typography variant="h4" gutterBottom>Shop Items</Typography>
-      <Box sx={{ mb: 2 }}>
-        <FormControl sx={{ minWidth: 120, mr: 2 }}>
+      <Box sx={{ mb: 2, display: 'flex', flexWrap: 'wrap', gap: 2 }}>
+        <FormControl sx={{ minWidth: 120 }}>
           <InputLabel>Category</InputLabel>
-          <Select
-            name="category"
-            value={inputFilters.category}
-            onChange={handleInputChange}
-            label="Category"
-          >
+          <Select name="category" value={inputFilters.category} onChange={handleInputChange} label="Category">
             <MenuItem value="">All</MenuItem>
             {categories.map(cat => <MenuItem key={cat} value={cat}>{cat}</MenuItem>)}
           </Select>
         </FormControl>
-        <TextField
-          name="fromPriceRange"
-          label="From Price"
-          type="number"
-          value={inputFilters.fromPriceRange}
-          onChange={handleInputChange}
-          sx={{ mr: 2 }}
-        />
-        <TextField
-          name="toPriceRange"
-          label="To Price"
-          type="number"
-          value={inputFilters.toPriceRange}
-          onChange={handleInputChange}
-          sx={{ mr: 2 }}
-        />
-        <TextField
-          name="name"
-          label="Search by Name"
-          value={inputFilters.name}
-          onChange={handleInputChange}
-          sx={{ mr: 2 }}
-        />
-        <FormControl sx={{ minWidth: 120, mr: 2 }}>
+        <TextField name="fromPriceRange" label="From Price" type="number" value={inputFilters.fromPriceRange} onChange={handleInputChange} />
+        <TextField name="toPriceRange" label="To Price" type="number" value={inputFilters.toPriceRange} onChange={handleInputChange} />
+        <TextField name="name" label="Search by Name" value={inputFilters.name} onChange={handleInputChange} />
+        <FormControl sx={{ minWidth: 120 }}>
           <InputLabel>Sort By</InputLabel>
-          <Select
-            name="sort-by"
-            value={inputFilters['sort-by']}
-            onChange={handleInputChange}
-            label="Sort By"
-          >
+          <Select name="sort-by" value={inputFilters['sort-by']} onChange={handleInputChange} label="Sort By">
             <MenuItem value="name">Name</MenuItem>
             <MenuItem value="unitPrice">Price</MenuItem>
             <MenuItem value="category">Category</MenuItem>
           </Select>
         </FormControl>
-        <FormControl sx={{ minWidth: 120, mr: 2 }}>
+        <FormControl sx={{ minWidth: 120 }}>
           <InputLabel>Direction</InputLabel>
-          <Select
-            name="direction"
-            value={inputFilters.direction}
-            onChange={handleInputChange}
-            label="Direction"
-          >
+          <Select name="direction" value={inputFilters.direction} onChange={handleInputChange} label="Direction">
             <MenuItem value="asc">Ascending</MenuItem>
             <MenuItem value="desc">Descending</MenuItem>
           </Select>
         </FormControl>
-        <Button variant="contained" onClick={handleApplyFilters} sx={{ mt: 1, mr: 1 }}>Apply Filter</Button>
+        <Button variant="contained" onClick={handleApplyFilters} sx={{ mt: 1 }}>Apply Filter</Button>
         <Button variant="outlined" onClick={handleRemoveFilters} sx={{ mt: 1 }}>Remove Filters</Button>
       </Box>
-      {items.length > 0 ? (
+      {isLoading ? (
+        <Grid container spacing={2}>
+          {Array.from({ length: pageSize }).map((_, index) => (
+            <Grid item xs={12} sm={6} md={4} key={index}>
+              <Card sx={{ height: 400, display: 'flex', flexDirection: 'column' }}>
+                <CardContent sx={{ flexGrow: 1 }}>
+                  <Skeleton variant="rectangular" width="100%" height={150} />
+                  <Skeleton variant="text" sx={{ fontSize: '1.5rem', mt: 1 }} />
+                  <Skeleton variant="text" sx={{ fontSize: '1rem' }} />
+                  <Skeleton variant="text" sx={{ fontSize: '1rem' }} />
+                  <Skeleton variant="text" sx={{ fontSize: '0.875rem' }} />
+                  <Box sx={{ mt: 1, display: 'flex', alignItems: 'center' }}>
+                    <Skeleton variant="rectangular" width={40} height={40} />
+                    <Skeleton variant="text" sx={{ mx: 1, width: 20 }} />
+                    <Skeleton variant="rectangular" width={40} height={40} />
+                  </Box>
+                </CardContent>
+                <CardActions sx={{ justifyContent: 'space-between' }}>
+                  <Skeleton variant="rectangular" width={100} height={36} />
+                  <Skeleton variant="rectangular" width={100} height={36} />
+                </CardActions>
+              </Card>
+            </Grid>
+          ))}
+        </Grid>
+      ) : items.length > 0 ? (
         <>
           <Grid container spacing={2}>
             {items.map(item => (
               <Grid item xs={12} sm={6} md={4} key={item.id}>
-                <Card>
-                  <CardContent>
-                    <img src={undefined} alt={item.name} style={{ maxWidth: '100%', height: 'auto' }} />
-                    <Typography variant="h6">{item.name}</Typography>
+                <Card sx={{ height: 400, display: 'flex', flexDirection: 'column' }}>
+                  <CardContent sx={{ flexGrow: 1 }}>
+                    <Box sx={{ width: '100%', height: 150, overflow: 'hidden', backgroundColor: '#f0f0f0' }}>
+                      <img
+                        src={item.imageUrl || 'https://via.placeholder.com/150?text=Image+Not+Available'}
+                        alt={item.name}
+                        style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                      />
+                    </Box>
+                    <Typography variant="h6" sx={{ mt: 1 }}>{item.name}</Typography>
                     <Typography color="text.secondary">${item.unitPrice.toFixed(2)}</Typography>
                     <Typography variant="body2">{item.details}</Typography>
                     <Typography variant="caption">Category: {item.category}</Typography>
-                    <Box sx={{ mt: 1 }}>
+                    <Box sx={{ mt: 1, display: 'flex', alignItems: 'center' }}>
                       <Button size="small" onClick={() => handleQuantityChange(item.id, -1)}><Remove /></Button>
-                      <Typography component="span" sx={{ mx: 1 }}>{item.quantity}</Typography>
+                      <Typography sx={{ mx: 1 }}>{item.quantity}</Typography>
                       <Button size="small" onClick={() => handleQuantityChange(item.id, 1)}><Add /></Button>
                     </Box>
                   </CardContent>
-                  <CardActions>
+                  <CardActions sx={{ justifyContent: 'space-between' }}>
                     <Button size="small" startIcon={<AddShoppingCart />} onClick={() => handleAddToCart(item.id)}>Add to Cart</Button>
                     <Button size="small" startIcon={<FavoriteBorder />} onClick={() => handleAddToWishlist(item.id, item.name, item.unitPrice)}>Wishlist</Button>
                   </CardActions>
@@ -309,14 +296,10 @@ const Home: React.FC = () => {
       <Dialog open={openLoginDialog} onClose={handleCloseLoginDialog}>
         <DialogTitle>Login Required</DialogTitle>
         <DialogContent>
-          <DialogContentText>
-            Please log in to add items to your wishlist or cart.
-          </DialogContentText>
+          <DialogContentText>Please log in to add items to your wishlist or cart.</DialogContentText>
         </DialogContent>
         <DialogActions>
-          <Button onClick={handleCloseLoginDialog} color="primary">
-            OK
-          </Button>
+          <Button onClick={handleCloseLoginDialog} color="primary">OK</Button>
         </DialogActions>
       </Dialog>
     </Box>
